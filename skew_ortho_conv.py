@@ -7,6 +7,10 @@ import math
 import time
 import einops
 
+import rakhuba_utils
+
+from soc_arnoldi import emv_arnoldi_conv, arnoldi_dynamic_sheduler, naive_dynamic_sheduler, emv_lanczos_conv
+
 def fantastic_four(conv_filter, num_iters=50):
     out_ch, in_ch, h, w = conv_filter.shape
     
@@ -56,7 +60,7 @@ def l2_normalize(tensor, eps=1e-12):
     return ans
 
 def transpose_filter(conv_filter):
-    conv_filter_T = torch.transpose(conv_filter, 0, 1)    
+    conv_filter_T = torch.transpose(conv_filter, 0, 1)
     conv_filter_T = torch.flip(conv_filter_T, [2, 3])
     return conv_filter_T
 
@@ -67,6 +71,7 @@ class SOC_Function(Function):
         kernel_size = conv_filter.shape[2]
         z = curr_z
         curr_fact = 1.
+        print("SOMETHING STRANGE HAPPEN")
         for i in range(1, 14):
             curr_z = F.conv2d(curr_z, conv_filter, 
                               padding=(kernel_size//2, 
@@ -90,10 +95,23 @@ class SOC_Function(Function):
 
 class SOC(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=None, 
-                 bias=True, train_terms=5, eval_terms=12, init_iters=50, update_iters=1, 
+                 bias=True, train_terms=6, eval_terms=12, init_iters=50, update_iters=1, 
                  update_freq=200, correction=0.7):
         super(SOC, self).__init__()
+
+        self.was_training = 1
+        self.epoch = 0
+
         assert (stride==1) or (stride==2)
+
+        # train_terms = 2
+        # eval_terms = 12
+        #print(f"INIT: TRAIN_TERMS={train_terms} EVAL_TERMS={eval_terms}")
+
+        self.time_conv_sum = 0
+        self.time_exp_sum = 0
+        self.counter = 0
+
         self.init_iters = init_iters
         self.out_channels = out_channels
         self.in_channels = in_channels*stride*stride
@@ -110,7 +128,7 @@ class SOC(nn.Module):
         if kernel_size == 1:
             correction = 1.0
         
-        self.random_conv_filter = nn.Parameter(torch.Tensor(torch.randn(self.max_channels, 
+        self.random_conv_filter = nn.Parameter(torch.Tensor(torch.randn(self.max_channels,
                                                self.max_channels, self.kernel_size, 
                                                self.kernel_size)).cuda(),
                                                requires_grad=True)
@@ -138,6 +156,8 @@ class SOC(nn.Module):
         else:
             self.bias = None
         self.reset_parameters()
+
+        #print(f"INIT: {self.random_conv_filter.dtype} {self.bias.dtype}")
             
     def reset_parameters(self):
         stdv = 1.0 / np.sqrt(self.max_channels)
@@ -188,14 +208,20 @@ class SOC(nn.Module):
         return sigma
 
     def forward(self, x):
+
         random_conv_filter_T = transpose_filter(self.random_conv_filter)
         conv_filter_skew = 0.5*(self.random_conv_filter - random_conv_filter_T)
         sigma = self.update_sigma()
         conv_filter_n = (self.correction * conv_filter_skew)/sigma
         
         if self.training:
+            self.was_training = 1
             num_terms = self.train_terms
         else:
+            if self.was_training:
+                self.was_training = 0
+                self.epoch += 1
+
             num_terms = self.eval_terms
         
         if self.stride > 1:
@@ -208,14 +234,141 @@ class SOC(nn.Module):
             curr_z = F.pad(x, p4d)
         else:
             curr_z = x
+            
+        #RADICALLY DECREASE PERFOMANCE
+        #torch.autograd.set_detect_anomaly(True) 
+
+        #curr_z = curr_z.float()
+        #conv_filter_n = conv_filter_n.float()
+
+        # curr_z.to(torch.float64)
+        # conv_filter_n.to(torch.float64)
+
+        # orth_err = rakhuba_utils.check_convolution_orthogonality_naive(conv_filter_n, curr_z, num_terms, self.kernel_size)
 
         z = curr_z
-        for i in range(1, num_terms+1):
-            curr_z = F.conv2d(curr_z, conv_filter_n, 
-                              padding=(self.kernel_size//2, 
-                                       self.kernel_size//2))/float(i)
-            z = z + curr_z
+
+        #z=z.double()
+        #curr_z = curr_z.double()
+        #conv_filter_n = conv_filter_n.double()
+        
+        curr_z_copy = curr_z.clone().detach()
+
+        #num_terms = naive_dynamic_sheduler(self.epoch)
+
+        #num_terms = 5
+
+        #NAIVE--------------------------------------
+
+        # time_start_glob = time.time()
+        # print(10 * "----")
+        # print(curr_z.shape)
+        #num_terms = 20
+        # if self.training:
+        #    num_terms = 3
+        #for i in range(1, num_terms+1):
+            #time_start = time.time()
+            #curr_z = F.conv2d(curr_z, conv_filter_n, 
+            #             padding=(self.kernel_size//2, 
+            #                      self.kernel_size//2))/float(i)
+            #torch.cuda.synchronize()
+            #time_end = time.time()
+            #self.time_conv_sum += (time_end - time_start)
+            #print("naive one conv", time_end - time_start)
+            #z = z + curr_z
+        #torch.cuda.synchronize()
+        #time_end_glob = time.time()
+        # self.time_exp_sum += (time_end_glob - time_start_glob)
+        # print("naive time for convs", time_end_glob - time_start_glob)
+        
+        # self.counter += 1
+
+        # mean_naive_one_conv = self.time_conv_sum / (num_terms * self.counter)
+        # mean_naive_exp = self.time_exp_sum / self.counter
+
+        #print("mean naive one conv", mean_naive_one_conv)
+        #print("mean naive exp", mean_naive_exp)
+        
+        # print(f"%{(num_terms * mean_naive_one_conv) / mean_naive_exp}")
+
+        #NAIVE--------------------------------------
+
+        # if self.training:
+        # print(conv_filter_n.shape, curr_z.shape)
+        # naive_true_err = rakhuba_utils.compare_with_true(conv_filter_n, curr_z_copy, self.kernel_size, z)
+        # print(f"naive_true_err {naive_true_err}")
+        
+        # orthogonality_error_naive = rakhuba_utils.check_convolution_orthogonality_naive(conv_filter_n, z, num_terms, self.kernel_size, curr_z_copy)
+        # print(f"orthogonality_error_naive {orthogonality_error_naive}")
+
+        # hatch_error_naive = rakhuba_utils.hatchinson_test_naive(conv_filter_n, curr_z, num_terms, self.kernel_size)
+        # print(f"hatchinson_error_naive {hatch_error_naive}")
+
+        #with open('errors','a') as f:
+        #    f.write(f'{str(orth_err.item())} {str(brute_err.item())}\n')
+
+
+        #ARNOLDI-------------------------------------
+        #time_start = time.time()
+        BASIS_SIZE = 8
+        EXP_TERMS = 30
+
+        if self.training:
+            BASIS_SIZE = 3
+            EXP_TERMS = 30
+        
+        #print(self.epoch)
+        #BASIS_SIZE, EXP_TERMS = arnoldi_dynamic_sheduler(self.epoch)
+        #print(10 * "----------")
+        #print(conv_filter_n.shape, curr_z.shape, torch.norm(curr_z).item())
+        #with torch.autograd.profiler.profile(use_cuda=True) as prof:
+
+        non_ort = 15
+
+        z = emv_arnoldi_conv(conv_filter_n, curr_z, BASIS_SIZE, self.kernel_size, EXP_TERMS, non_ort)
+
+        #print(prof)
+        #torch.cuda.synchronize()
+        #time_end = time.time()
+        #print("arnoldi time for covs", time_end - time_start)
+        #ARNOLDI-------------------------------------
+
+        # if self.training:
             
+        #     print(conv_filter_n.shape, curr_z.shape)
+
+        #     arnoldi_true_err = rakhuba_utils.compare_with_true(conv_filter_n, curr_z_copy, self.kernel_size, z)
+        #     print(f"arnoldi_true_err {arnoldi_true_err}")        
+
+        #     orthogonality_error_arnoldi = rakhuba_utils.check_convolution_orthogonality_arnoldi(conv_filter_n, z, BASIS_SIZE, EXP_TERMS, self.kernel_size, curr_z_copy, non_ort)
+        #     print(f"orthogonality_error_arnoldi {orthogonality_error_arnoldi}")
+
+        #     hatch_error_arnoldi = rakhuba_utils.hatchinson_test_arnoldi(conv_filter_n, curr_z, BASIS_SIZE, EXP_TERMS, self.kernel_size, non_ort)
+        #     print(f"hatchinson_error_arnoldi {hatch_error_arnoldi}")
+
+
+        #LANCZOS
+
+        # BASIS_SIZE = 7
+        # EXP_TERMS = 15
+
+        # if self.training:
+        #     BASIS_SIZE = 5
+        #     EXP_TERMS = 15
+
+        # z = emv_lanczos_conv(conv_filter_n, curr_z, BASIS_SIZE, self.kernel_size, EXP_TERMS)
+
+        # if self.training:
+        #     #print(conv_filter_n.shape, curr_z.shape)            
+        #     lanczos_true_err = rakhuba_utils.compare_with_true(conv_filter_n, curr_z_copy, self.kernel_size, z)
+        #     print(f"lanczos_true_err {lanczos_true_err}") 
+        #     orthogonality_error_lanczos = rakhuba_utils.check_convolution_orthogonality_lanczos(conv_filter_n, z, BASIS_SIZE, EXP_TERMS, self.kernel_size, curr_z_copy)
+        #     print(f"orthogonality_error_lanczos {orthogonality_error_lanczos}")
+
+        #     hatch_error_lanczos = rakhuba_utils.hatchinson_test_lanczos(conv_filter_n, curr_z, BASIS_SIZE, EXP_TERMS, self.kernel_size)
+        #     print(f"hatchinson_error_lanczos {hatch_error_lanczos}")
+
+
         if self.out_channels < self.in_channels:
             z = z[:, :self.out_channels, :, :]
             

@@ -160,6 +160,7 @@ def main():
     logger.info('Epoch \t Seconds \t LR \t Train Loss \t Train Acc \t Test Loss \t ' + 
                 'Test Acc \t Test Robust (36) \t Test Robust (72) \t Test Robust (108) \t Test Cert')
     for epoch in range(args.epochs):
+
         model.train()
         start_epoch_time = time.time()
         train_loss = 0
@@ -169,8 +170,11 @@ def main():
         train_n = 0
         for i, (X, y) in enumerate(train_loader):
             X, y = X.cuda(), y.cuda()
-            
+            #time_forward_begin = time.time()
             output = model(X)
+            #torch.cuda.synchronize()
+            #time_forward_end = time.time()
+            #print(f"forward_time {time_forward_end - time_forward_begin}")
             curr_correct = (output.max(1)[1] == y)
             if args.lln:
                 curr_cert = lln_certificates(output, y, model.last_layer, L)
@@ -185,13 +189,19 @@ def main():
                 scaled_loss.backward()
             opt.step()
 
+            #torch.cuda.synchronize()
+            #time_backward_end = time.time()
+            #print(f"backward_time {time_backward_end - time_forward_end}")
+
             train_loss += ce_loss.item() * y.size(0)
             train_cert += (curr_cert * curr_correct).sum().item()
             train_robust += ((curr_cert > (args.epsilon/255.)) * curr_correct).sum().item()
             train_acc += curr_correct.sum().item()
             train_n += y.size(0)
             scheduler.step()
-            
+        
+        epoch_train_only_time = time.time()
+
         # Check current test accuracy of model
         losses_arr, correct_arr, certificates_arr = evaluate_certificates(test_loader, model, L)
         
@@ -204,10 +214,11 @@ def main():
             prev_robust_acc = robust_acc
             best_epoch = epoch
         
+        torch.cuda.synchronize()
         epoch_time = time.time()
         lr = scheduler.get_last_lr()[0]
-        logger.info('%d \t %.1f \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f',
-            epoch, epoch_time - start_epoch_time, lr, train_loss/train_n, train_acc/train_n, 
+        logger.info('%d \t %.1f \t %.1f \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f \t %.4f',
+            epoch, epoch_time - start_epoch_time, epoch_train_only_time - start_epoch_time, lr, train_loss/train_n, train_acc/train_n, 
             test_loss, test_acc, test_robust_acc_list[0], test_robust_acc_list[1], 
             test_robust_acc_list[2], test_cert)
         
@@ -246,7 +257,7 @@ def main():
 
     start_test_time = time.time()
     losses_arr, correct_arr, certificates_arr = evaluate_certificates(test_loader, model_test, L)
-    total_time = time.time() - start_test_time
+    total_time = time.time() - start_test_time  
     
     test_loss, test_acc, test_cert, test_robust_acc_list = robust_statistics(
         losses_arr, correct_arr, certificates_arr)

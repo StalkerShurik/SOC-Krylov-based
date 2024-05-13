@@ -37,15 +37,16 @@ class LipConvNet(nn.Module):
         
         conv_layer = conv_mapping[conv_name]
         assert type(block_size) == int
-
+        #originally all ks=3 and last ks=1
+        ks = 3
         self.layer1 = self._make_layer(init_channels, block_size, conv_layer, 
-                                       activation, stride=2, kernel_size=3)
+                                       activation, stride=2, kernel_size=ks)
         self.layer2 = self._make_layer(self.in_planes, block_size, conv_layer, 
-                                       activation, stride=2, kernel_size=3)
+                                       activation, stride=2, kernel_size=ks)
         self.layer3 = self._make_layer(self.in_planes, block_size, conv_layer, 
-                                       activation, stride=2, kernel_size=3)
+                                       activation, stride=2, kernel_size=ks)
         self.layer4 = self._make_layer(self.in_planes, block_size, conv_layer,
-                                       activation, stride=2, kernel_size=3)
+                                       activation, stride=2, kernel_size=ks)
         self.layer5 = self._make_layer(self.in_planes, block_size, conv_layer, 
                                        activation, stride=2, kernel_size=1)
         

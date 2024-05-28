@@ -258,9 +258,9 @@ def hatchinson_test_lanczos(conv_filter_n, curr_z, basis_size, exp_terms, kernel
 #print("---------")
 #torch.cuda.synchronize(device=None)
 
-BASIS_SIZE_ARNOLDI = 3
+BASIS_SIZE_ARNOLDI = 8
 BASIS_SIZE_LANCZOS = 8 
-EXP_TERMS_ARNOLDI=30
+EXP_TERMS_ARNOLDI = 30
 
 NAIVE_TERMS = 12
 
@@ -273,8 +273,8 @@ NAIVE_TERMS = 12
 # time_4 = time.time()
 #print(time_4 - time_3, time_3 - time_2)
 
-kernel_size = 3
-max_channels = 100
+kernel_size = 7
+max_channels = 128
 corection = 0.01
 
 batch_size = 16
@@ -302,31 +302,37 @@ for i in range(5):
     # torch.cuda.synchronize(device=None)
     # time_loop_2 = time.time()
     # print(f"arnnoldi_forward {time_loop_2 - time_loop_1}")
-    # torch.mean(res_arnoldi_loop).backward()
-    # torch.cuda.synchronize(device=None)
-    # time_loop_3 = time.time()
-    # print(f"arnoldi_backward {time_loop_3 - time_loop_2}")
-    # arnoldi_time = time_loop_2 - time_loop_1
-    # print(torch.linalg.norm(true_conv - res_arnoldi_loop) / torch.linalg.norm(true_conv).item())
-    # print("hatch_arnoldi", hatchinson_test_arnoldi(conv_filter_n, curr_z, BASIS_SIZE_ARNOLDI, EXP_TERMS_ARNOLDI, kernel_size, 30))
 
-    time_loop_1 = time.time()
-    res_lanczos_loop = emv_lanczos_conv(conv_filter_n, curr_z.clone().detach(), BASIS_SIZE_LANCZOS, kernel_size, EXP_TERMS_ARNOLDI)
-    torch.cuda.synchronize(device=None)
-    time_loop_2 = time.time()
-    print(f"forward_lanzcos {time_loop_2 - time_loop_1}")
-    torch.mean(res_lanczos_loop).backward()
-    torch.cuda.synchronize(device=None)
-    time_loop_3 = time.time()
-    print(f"backward_lanzcos {time_loop_3 - time_loop_2}")
-    print(torch.linalg.norm(true_conv - res_lanczos_loop) / torch.linalg.norm(true_conv))
-    #print("hatch_lanczos", hatchinson_test_lanczos(conv_filter_n, curr_z, BASIS_SIZE_LANCZOS, EXP_TERMS_ARNOLDI, kernel_size))
-
-    #res_naive_loop = emv_naive_conv(conv_filter_n, curr_z.clone().detach(), NAIVE_TERMS, kernel_size)
-    #torch.mean(res_naive_loop).backward()
+    #torch.mean(res_arnoldi_loop).backward()
     #torch.cuda.synchronize(device=None)
     #time_loop_3 = time.time()
-    
+    #print(f"arnoldi_backward {time_loop_3 - time_loop_2}")
+    #arnoldi_time = time_loop_2 - time_loop_1
+    #print(torch.linalg.norm(true_conv - res_arnoldi_loop) / torch.linalg.norm(true_conv).item())
+    #print("hatch_arnoldi", hatchinson_test_arnoldi(conv_filter_n, curr_z, BASIS_SIZE_ARNOLDI, EXP_TERMS_ARNOLDI, kernel_size, 30))
+
+    # time_loop_1 = time.time()
+    # res_lanczos_loop = emv_lanczos_conv(conv_filter_n, curr_z.clone().detach(), BASIS_SIZE_LANCZOS, kernel_size, EXP_TERMS_ARNOLDI)
+    # torch.cuda.synchronize(device=None)
+    # time_loop_2 = time.time()
+    # print(f"forward_lanzcos {time_loop_2 - time_loop_1}")
+    # torch.mean(res_lanczos_loop).backward()
+    # torch.cuda.synchronize(device=None)
+    # time_loop_3 = time.time()
+    # print(f"backward_lanzcos {time_loop_3 - time_loop_2}")
+    #print(torch.linalg.norm(true_conv - res_lanczos_loop) / torch.linalg.norm(true_conv))
+    #print("hatch_lanczos", hatchinson_test_lanczos(conv_filter_n, curr_z, BASIS_SIZE_LANCZOS, EXP_TERMS_ARNOLDI, kernel_size))
+
+    # time_loop_1 = time.time()
+    # res_naive_loop = emv_naive_conv(conv_filter_n, curr_z, NAIVE_TERMS, kernel_size)
+    # torch.cuda.synchronize(device=None)
+    # time_loop_2 = time.time()
+    # print(f"forward_naive {time_loop_2 - time_loop_1}")
+
+    # torch.mean(res_naive_loop).backward()
+    # torch.cuda.synchronize(device=None)
+    # time_loop_3 = time.time()
+    # print(f"backward_naive {time_loop_3 - time_loop_2}")
     #print(hatchinson_test_naive(conv_filter_n, curr_z, NAIVE_TERMS, kernel_size))
 
     #print((time_loop_2 - time_loop_1) / (time_loop_3 - time_loop_2))

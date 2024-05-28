@@ -9,7 +9,7 @@ import einops
 
 import rakhuba_utils
 
-from soc_arnoldi import emv_arnoldi_conv, arnoldi_dynamic_sheduler, naive_dynamic_sheduler, emv_lanczos_conv
+from soc_arnoldi import emv_arnoldi_conv, arnoldi_dynamic_sheduler, naive_dynamic_sheduler, emv_lanczos_conv, emv_arnoldi_conv_qr
 
 def fantastic_four(conv_filter, num_iters=50):
     out_ch, in_ch, h, w = conv_filter.shape
@@ -269,8 +269,8 @@ class SOC(nn.Module):
         #for i in range(1, num_terms+1):
             #time_start = time.time()
             #curr_z = F.conv2d(curr_z, conv_filter_n, 
-            #             padding=(self.kernel_size//2, 
-            #                      self.kernel_size//2))/float(i)
+            #           padding=(self.kernel_size//2, 
+            #                    self.kernel_size//2))/float(i)
             #torch.cuda.synchronize()
             #time_end = time.time()
             #self.time_conv_sum += (time_end - time_start)
@@ -310,11 +310,11 @@ class SOC(nn.Module):
 
         #ARNOLDI-------------------------------------
         #time_start = time.time()
-        BASIS_SIZE = 8
+        BASIS_SIZE = 6
         EXP_TERMS = 30
 
         if self.training:
-            BASIS_SIZE = 3
+            BASIS_SIZE = 4
             EXP_TERMS = 30
         
         #print(self.epoch)
@@ -325,7 +325,9 @@ class SOC(nn.Module):
 
         non_ort = 15
 
-        z = emv_arnoldi_conv(conv_filter_n, curr_z, BASIS_SIZE, self.kernel_size, EXP_TERMS, non_ort)
+        #z = emv_arnoldi_conv(conv_filter_n, curr_z, BASIS_SIZE, self.kernel_size, EXP_TERMS, non_ort)
+
+        z = emv_arnoldi_conv_qr(conv_filter_n, curr_z, BASIS_SIZE, self.kernel_size, EXP_TERMS)
 
         #print(prof)
         #torch.cuda.synchronize()
@@ -346,7 +348,6 @@ class SOC(nn.Module):
         #     hatch_error_arnoldi = rakhuba_utils.hatchinson_test_arnoldi(conv_filter_n, curr_z, BASIS_SIZE, EXP_TERMS, self.kernel_size, non_ort)
         #     print(f"hatchinson_error_arnoldi {hatch_error_arnoldi}")
 
-
         #LANCZOS
 
         # BASIS_SIZE = 7
@@ -356,7 +357,7 @@ class SOC(nn.Module):
         #     BASIS_SIZE = 5
         #     EXP_TERMS = 15
 
-        # z = emv_lanczos_conv(conv_filter_n, curr_z, BASIS_SIZE, self.kernel_size, EXP_TERMS)
+        #z = emv_lanczos_conv(conv_filter_n, curr_z, BASIS_SIZE, self.kernel_size, EXP_TERMS)
 
         # if self.training:
         #     #print(conv_filter_n.shape, curr_z.shape)            
